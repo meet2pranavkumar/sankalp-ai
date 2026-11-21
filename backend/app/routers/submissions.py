@@ -1,15 +1,17 @@
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.core import clock
 from app.core.config import get_settings
 from app.core.database import get_db, get_session_factory
 from app.core.deps import get_current_user
 from app.core.problem_access import get_problem_or_404
-from app.models import Role, Submission, User
+from app.models import Assessment, Problem, Role, Submission, User
 from app.schemas import RunIn, SubmissionBrief, SubmissionOut, SubmitIn
+from app.services.assessments import EXAM, check_submission_allowed
 from app.services.grading import INTERNAL_ERROR
 from app.services.judge import Judge, get_judge
 from app.services.submissions import process_submission
@@ -22,11 +24,6 @@ def judge_dependency() -> Judge:
         return get_judge()
     except RuntimeError as err:
         raise HTTPException(status_code=503, detail=str(err))
-
-
-def _aware(moment: datetime) -> datetime:
-    # SQLite gives back dates without a time zone; our dates are always UTC.
-    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
 
 
 def _check_source(source_code: str) -> None:
@@ -46,7 +43,7 @@ def _check_cooldown(db: Session, user: User, kind: str, seconds: float) -> None:
     )
     if last is None:
         return
-    wait = seconds - (datetime.now(timezone.utc) - _aware(last)).total_seconds()
+    wait = seconds - (clock.utc_now() - clock.aware(last)).total_seconds()
     if wait > 0:
         raise HTTPException(
             status_code=429,
@@ -56,7 +53,7 @@ def _check_cooldown(db: Session, user: User, kind: str, seconds: float) -> None:
 
 
 def _create(db: Session, user: User, kind: str, **fields) -> Submission:
-    sub = Submission(user_id=user.id, kind=kind, status="queued", **fields)
+    sub = Submission(user_id=user.id, kind=kind, status="queued", created_at=clock.utc_now(), **fields)
     db.add(sub)
     db.commit()
     db.refresh(sub)
@@ -74,15 +71,17 @@ def run_code(
 ):
     """Try the code with your own input. Poll GET /submissions/{id} for the answer."""
     _check_source(data.source_code)
-    if data.problem_id is not None:
+    if data.assessment_id is not None:
+        check_submission_allowed(db, user, data.assessment_id, data.problem_id, clock.utc_now())
+    elif data.problem_id is not None:
         get_problem_or_404(user, data.problem_id, db)  # only to make sure the person may see it
     _check_cooldown(db, user, "run", get_settings().run_cooldown_seconds)
     sub = _create(
-        db, user, "run",
+        db, user, "run", assessment_id=data.assessment_id,
         problem_id=data.problem_id, language=data.language, source_code=data.source_code, stdin=data.stdin,
     )
     background.add_task(process_submission, sub.id, session_factory, judge)
-    return sub
+    return present_submission(sub, user, db)
 
 
 @router.post("/submissions", response_model=SubmissionOut, status_code=202)
@@ -96,11 +95,45 @@ def submit_code(
 ):
     """Judge the code against all test cases. Poll GET /submissions/{id} for the verdict."""
     _check_source(data.source_code)
-    problem = get_problem_or_404(user, data.problem_id, db)
+    if data.assessment_id is not None:
+        check_submission_allowed(db, user, data.assessment_id, data.problem_id, clock.utc_now())
+        problem = db.get(Problem, data.problem_id)
+    else:
+        problem = get_problem_or_404(user, data.problem_id, db)
     _check_cooldown(db, user, "submit", get_settings().submit_cooldown_seconds)
-    sub = _create(db, user, "submit", problem_id=problem.id, language=data.language, source_code=data.source_code)
+    sub = _create(
+        db, user, "submit", assessment_id=data.assessment_id, problem_id=problem.id,
+        language=data.language, source_code=data.source_code,
+    )
     background.add_task(process_submission, sub.id, session_factory, judge)
-    return sub
+    return present_submission(sub, user, db)
+
+
+def exam_results_hidden(sub: Submission, viewer: User, db: Session, cache: dict | None = None) -> bool:
+    """A student must not see the verdict of an exam answer until the teacher publishes the results.
+    (Run results are different: they are the student's own test and are always shown.)"""
+    if sub.assessment_id is None or sub.kind != "submit" or viewer.id != sub.user_id or viewer.role != Role.student.value:
+        return False
+    if cache is not None and sub.assessment_id in cache:
+        return cache[sub.assessment_id]
+    a = db.get(Assessment, sub.assessment_id)
+    hidden = a is not None and a.type == EXAM and not a.results_published
+    if cache is not None:
+        cache[sub.assessment_id] = hidden
+    return hidden
+
+
+HIDDEN_FIELDS = dict(
+    verdict=None, passed_count=None, total_count=None, runtime_ms=None, memory_kb=None,
+    stdout=None, stderr=None, compile_output=None, message=None, results=None,
+)
+
+
+def present_submission(sub: Submission, viewer: User, db: Session) -> SubmissionOut:
+    out = SubmissionOut.model_validate(sub)
+    if exam_results_hidden(sub, viewer, db):
+        out = out.model_copy(update={**HIDDEN_FIELDS, "hidden": True})
+    return out
 
 
 def _can_read(user: User, sub: Submission, db: Session) -> bool:
@@ -120,23 +153,31 @@ def get_submission(submission_id: int, user: User = Depends(get_current_user), d
     # If the server restarted while judging, the job is lost. Do not leave the student waiting forever.
     if sub.status in ("queued", "running"):
         patience = timedelta(seconds=get_settings().judge_timeout_seconds + 30)
-        if datetime.now(timezone.utc) - _aware(sub.created_at) > patience:
+        if clock.utc_now() - clock.aware(sub.created_at) > patience:
             sub.status = "error"
             sub.verdict = INTERNAL_ERROR
             sub.message = "Judging was interrupted. Please try again."
-            sub.finished_at = datetime.now(timezone.utc)
+            sub.finished_at = clock.utc_now()
             db.commit()
             db.refresh(sub)
-    return sub
+    return present_submission(sub, user, db)
 
 
 @router.get("/problems/{problem_id}/submissions", response_model=list[SubmissionBrief])
 def my_submissions(problem_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """My own earlier submits for this problem, newest first."""
     get_problem_or_404(user, problem_id, db)
-    return db.scalars(
+    subs = db.scalars(
         select(Submission)
         .where(Submission.user_id == user.id, Submission.problem_id == problem_id, Submission.kind == "submit")
         .order_by(Submission.created_at.desc(), Submission.id.desc())
         .limit(20)
     ).all()
+    cache: dict = {}
+    briefs = []
+    for sub in subs:
+        brief = SubmissionBrief.model_validate(sub)
+        if exam_results_hidden(sub, user, db, cache):
+            brief = brief.model_copy(update=dict(verdict=None, passed_count=None, total_count=None, runtime_ms=None, hidden=True))
+        briefs.append(brief)
+    return briefs

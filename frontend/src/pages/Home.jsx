@@ -10,18 +10,21 @@ const TIPS = {
     ["/problems", "Add problems to the shared bank"],
   ],
   admin: [
+    ["/assessments", "See assignments and exams"],
     ["/courses", "See and publish courses"],
     ["/people", "Add teachers and students"],
     ["/batches", "See all batches"],
     ["/problems", "Create coding problems"],
   ],
   teacher: [
+    ["/assessments", "Create an assignment or exam"],
     ["/courses", "Make a course from the starter course"],
     ["/batches", "Create a batch"],
     ["/people", "Add students"],
     ["/problems", "Create coding problems"],
   ],
   student: [
+    ["/assessments", "See your assignments and exams"],
     ["/courses", "Start learning: C Programming Basics"],
     ["/problems", "Solve a coding problem"],
     ["/batches", "See my batches"],
@@ -48,7 +51,7 @@ export default function Home() {
           ))}
         </ul>
       </Card>
-      <p className="text-sm text-slate-500">Exams are coming in the next phase.</p>
+      <p className="text-sm text-slate-500">The AI helper is coming in a later phase.</p>
     </div>
   );
 }

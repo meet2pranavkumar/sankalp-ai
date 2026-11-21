@@ -20,7 +20,7 @@ export function mockBackend(handlers) {
     if (!handler) return { ok: false, status: 404, json: async () => ({ detail: `no mock for ${key}` }) };
     const result = handler(options);
     const [status, body] = Array.isArray(result) && typeof result[0] === "number" ? result : [200, result];
-    return { ok: status < 400, status, json: async () => body };
+    return { ok: status < 400, status, json: async () => body, blob: async () => body };
   });
 }
 

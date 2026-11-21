@@ -1,6 +1,7 @@
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.core import clock
 from app.models import Problem, Role, User
 
 
@@ -21,7 +22,11 @@ def can_edit_problem(user: User, problem: Problem) -> bool:
 
 
 def get_problem_or_404(user: User, problem_id: int, db: Session) -> Problem:
+    from app.services.assessments import locked_problem_ids  # imported here to avoid a circular import
+
     problem = db.get(Problem, problem_id)
     if problem is None or not can_view_problem(user, problem):
         raise HTTPException(status_code=404, detail="Problem not found.")
+    if user.role == Role.student.value and problem.id in locked_problem_ids(db, clock.utc_now()):
+        raise HTTPException(status_code=404, detail="Problem not found.")  # it belongs to an exam that is not over
     return problem

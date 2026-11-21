@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.access import get_batch_or_404, not_found
@@ -52,7 +52,7 @@ def list_members(batch_id: int, actor: User = Depends(teaching_staff), db: Sessi
         select(User)
         .join(BatchMember, BatchMember.user_id == User.id)
         .where(BatchMember.batch_id == batch.id)
-        .order_by(User.name)
+        .order_by(func.lower(User.name), User.id)
     )
     return db.scalars(query).unique().all()
 

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -123,7 +123,7 @@ def list_users(
     actor: User = Depends(staff),
     db: Session = Depends(get_db),
 ):
-    query = select(User).order_by(User.name)
+    query = select(User).order_by(func.lower(User.name), User.id)
     if actor.role == Role.super_admin.value:
         if college_id is not None:
             query = query.where(User.college_id == college_id)

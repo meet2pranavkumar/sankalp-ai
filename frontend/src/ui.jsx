@@ -100,3 +100,18 @@ export function ProgressBar({ done, total }) {
 export function Badge({ children, color = "bg-slate-100 text-slate-700" }) {
   return <span className={`inline-block rounded px-2 py-0.5 text-xs font-semibold ${color}`}>{children}</span>;
 }
+
+export const assessmentStatus = {
+  upcoming: { label: "Starts later", color: "bg-slate-100 text-slate-700" },
+  ready: { label: "Ready to start", color: "bg-indigo-100 text-indigo-800" },
+  in_progress: { label: "In progress", color: "bg-amber-100 text-amber-800" },
+  open: { label: "Open", color: "bg-emerald-100 text-emerald-800" },
+  finished: { label: "Finished", color: "bg-slate-200 text-slate-800" },
+  closed: { label: "Closed", color: "bg-slate-200 text-slate-800" },
+  missed: { label: "Missed", color: "bg-red-100 text-red-800" },
+};
+
+export function StatusBadge({ status }) {
+  const info = assessmentStatus[status];
+  return info ? <Badge color={info.color}>{info.label}</Badge> : null;
+}

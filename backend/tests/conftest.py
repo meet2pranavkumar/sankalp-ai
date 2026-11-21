@@ -6,6 +6,8 @@ os.environ["BCRYPT_ROUNDS"] = "4"  # fast hashing, tests only
 os.environ["SUBMIT_COOLDOWN_SECONDS"] = "0"  # tests that need the cooldown turn it on themselves
 os.environ["RUN_COOLDOWN_SECONDS"] = "0"
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -18,6 +20,7 @@ from app.core.security import hash_password  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import College, Role, User  # noqa: E402
 from app.routers.submissions import judge_dependency  # noqa: E402
+from app.services.finalizer import optional_judge  # noqa: E402
 from app.services.judge.base import JudgeJob, JudgeOutcome, RunStatus  # noqa: E402
 
 PASSWORD = "password123"
@@ -75,6 +78,7 @@ def client(db_session, session_factory, fake_judge):
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_session_factory] = lambda: session_factory
     app.dependency_overrides[judge_dependency] = lambda: fake_judge
+    app.dependency_overrides[optional_judge] = lambda: fake_judge
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
@@ -137,4 +141,46 @@ def world(make_college, make_user):
         "admin2": make_user("admin2@x.com", Role.admin, c2),
         "teacher2": make_user("teacher2@x.com", Role.teacher, c2),
         "student2": make_user("student2@x.com", Role.student, c2),
+    }
+
+
+class FakeClock:
+    """Lets a test move through time: clock.advance(minutes=30)."""
+
+    def __init__(self):
+        self.now = datetime.now(timezone.utc).replace(microsecond=0)
+
+    def advance(self, **kwargs):
+        self.now += timedelta(**kwargs)
+
+    def at(self, **kwargs):
+        """A moment relative to now: clock.at(minutes=+90)."""
+        return self.now + timedelta(**kwargs)
+
+
+@pytest.fixture()
+def clock(monkeypatch):
+    from app.core import clock as clock_module
+
+    fake = FakeClock()
+    monkeypatch.setattr(clock_module, "utc_now", lambda: fake.now)
+    return fake
+
+
+@pytest.fixture()
+def school(client, world, login, make_user, clock):
+    """teacher1's batch (with student1 in it), a classmate NOT in the batch, and two problems."""
+    from tests.helpers import create_problem
+
+    teacher = login(world["teacher1"])
+    batch = client.post("/api/v1/batches", headers=teacher, json={"name": "CSE Sem 3"}).json()
+    client.post(f"/api/v1/batches/{batch['id']}/members", headers=teacher, json={"user_ids": [world["student1"].id]})
+    outsider = make_user("outsider@x.com", Role.student, world["c1"], name="Olga Outsider")
+    return {
+        "world": world, "batch": batch, "teacher": teacher,
+        "student": login(world["student1"]), "student_user": world["student1"],
+        "outsider": login(outsider), "outsider_user": outsider,
+        "admin": login(world["admin1"]),
+        "p1": create_problem(client, teacher, title="Add two numbers"),
+        "p2": create_problem(client, teacher, title="Add again"),
     }

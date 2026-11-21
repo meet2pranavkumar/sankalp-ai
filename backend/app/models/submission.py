@@ -19,6 +19,7 @@ class Submission(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     problem_id: Mapped[int | None] = mapped_column(ForeignKey("problems.id"), index=True)  # a Run may have no problem
+    assessment_id: Mapped[int | None] = mapped_column(ForeignKey("assessments.id"), index=True)  # set when it counts for marks
     kind: Mapped[str] = mapped_column(String(10), nullable=False)  # "run" or "submit"
     language: Mapped[str] = mapped_column(String(10), nullable=False)
     source_code: Mapped[str] = mapped_column(Text, nullable=False)

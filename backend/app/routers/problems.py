@@ -2,11 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
+from app.core import clock
 from app.core.database import get_db
 from app.core.deps import get_current_user, require_roles
 from app.core.problem_access import can_edit_problem, get_problem_or_404
-from app.models import Problem, Role, Submission, TestCase, User
+from app.models import Assessment, Problem, Role, Submission, TestCase, User
 from app.schemas import LanguageOut, ProblemIn, ProblemOut, ProblemSummary, TestCaseOut
+from app.services.assessments import locked_problem_ids
 from app.services.grading import ACCEPTED
 from app.services.languages import LANGUAGES
 
@@ -14,7 +16,7 @@ router = APIRouter(tags=["problems"])
 authors = require_roles(Role.super_admin, Role.admin, Role.teacher)
 
 
-def _present(problem: Problem, user: User) -> ProblemOut:
+def present_problem(problem: Problem, user: User) -> ProblemOut:
     can_edit = can_edit_problem(user, problem)
     tests = [t for t in problem.test_cases if can_edit or not t.is_hidden]  # hidden tests never leave the server
     return ProblemOut(
@@ -70,19 +72,28 @@ def list_problems(
     if q:
         query = query.where(Problem.title.ilike(f"%{q.strip()}%"))
     problems = db.scalars(query).all()
+    if user.role == Role.student.value:
+        locked = locked_problem_ids(db, clock.utc_now())  # exam questions stay secret until the exam is over
+        problems = [p for p in problems if p.id not in locked]
     if tag:
         wanted = tag.strip().lower()
         problems = [p for p in problems if wanted in p.tags]
 
-    solved_ids = set(
-        db.scalars(
-            select(Submission.problem_id).where(
+    # An exam answer must not show a green tick before the teacher publishes the results.
+    secret_assessments = set(
+        db.scalars(select(Assessment.id).where(Assessment.type == "exam", Assessment.results_published.is_(False)))
+    )
+    solved_ids = {
+        problem_id
+        for problem_id, assessment_id in db.execute(
+            select(Submission.problem_id, Submission.assessment_id).where(
                 Submission.user_id == user.id,
                 Submission.kind == "submit",
                 Submission.verdict == ACCEPTED,
             )
         )
-    )
+        if assessment_id not in secret_assessments
+    }
     return [
         ProblemSummary(
             id=p.id, title=p.title, difficulty=p.difficulty, tags=p.tags,
@@ -112,12 +123,12 @@ def create_problem(data: ProblemIn, user: User = Depends(authors), db: Session =
     db.add(problem)
     db.commit()
     db.refresh(problem)
-    return _present(problem, user)
+    return present_problem(problem, user)
 
 
 @router.get("/problems/{problem_id}", response_model=ProblemOut)
 def get_problem(problem_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    return _present(get_problem_or_404(user, problem_id, db), user)
+    return present_problem(get_problem_or_404(user, problem_id, db), user)
 
 
 @router.put("/problems/{problem_id}", response_model=ProblemOut)
@@ -138,4 +149,4 @@ def update_problem(
     _fill_tests(problem, data)  # old tests are removed, new ones saved
     db.commit()
     db.refresh(problem)
-    return _present(problem, user)
+    return present_problem(problem, user)

@@ -220,3 +220,14 @@ def test_bulk_needs_staff_and_a_usable_batch(client, world, login):
     other = client.post("/api/v1/batches", headers=login(world["teacher1b"]), json={"name": "Other"}).json()
     res = client.post("/api/v1/users/bulk", headers=login(world["teacher1"]), json={**payload, "batch_id": other["id"]})
     assert res.status_code == 404
+
+
+def test_people_are_sorted_by_name_ignoring_capital_letters(client, world, login, make_user):
+    """SQLite and PostgreSQL sort capitals differently. The list must look the same on both."""
+    from app.models import Role
+
+    for name in ("zoe", "Bob", "alice", "Carol"):
+        make_user(f"{name.lower()}@x.com", Role.student, world["c1"], name=name)
+    names = [u["name"] for u in client.get("/api/v1/users?role=student", headers=login(world["admin1"])).json()]
+    assert names == sorted(names, key=str.lower)
+    assert names[:4] == ["alice", "Bob", "Carol", "student1"]

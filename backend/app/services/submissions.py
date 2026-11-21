@@ -1,9 +1,10 @@
 """Background work: send a submission to the judge and save what came back."""
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy.orm import sessionmaker
 
+from app.core import clock
 from app.models import Problem, Submission
 from app.services.grading import INTERNAL_ERROR, TestData, grade
 from app.services.judge.base import Judge, JudgeJob, RunStatus
@@ -16,7 +17,7 @@ KEEP_CHARS = 20000  # most output we store for a Run
 
 
 def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return clock.utc_now()
 
 
 def process_submission(submission_id: int, session_factory: sessionmaker, judge: Judge) -> None:

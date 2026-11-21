@@ -5,6 +5,7 @@ import { Button, roleLabel } from "./ui.jsx";
 const NAV = [
   { to: "/", label: "Home", roles: ["student", "teacher", "admin", "super_admin"], end: true },
   { to: "/courses", label: "Courses", roles: ["student", "teacher", "admin", "super_admin"] },
+  { to: "/assessments", label: "Assessments", roles: ["student", "teacher", "admin"] },
   { to: "/problems", label: "Problems", roles: ["student", "teacher", "admin", "super_admin"] },
   { to: "/colleges", label: "Colleges", roles: ["super_admin"] },
   { to: "/people", label: "People", roles: ["super_admin", "admin", "teacher"] },

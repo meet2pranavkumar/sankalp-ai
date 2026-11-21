@@ -108,3 +108,11 @@ def test_languages_list_needs_no_login(client):
     res = client.get("/api/v1/languages")
     assert res.status_code == 200
     assert {l["key"] for l in res.json()} == {"c", "cpp", "java", "python"}
+
+
+def test_a_teacher_cannot_share_a_problem_by_editing_it(client, world, login):
+    teacher = login(world["teacher1"])
+    p = create_problem(client, teacher)
+    res = client.put(f"/api/v1/problems/{p['id']}", headers=teacher, json=problem_body(is_public=True))
+    assert res.status_code == 403 and "platform owner" in res.json()["detail"]
+    assert client.get(f"/api/v1/problems/{p['id']}", headers=login(world["student2"])).status_code == 404  # still private

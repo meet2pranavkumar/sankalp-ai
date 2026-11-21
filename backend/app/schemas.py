@@ -218,12 +218,14 @@ class RunIn(BaseModel):
     source_code: str = Field(min_length=1)
     stdin: str = Field(default="", max_length=100_000)
     problem_id: int | None = None  # optional: use this problem's time and memory limits
+    assessment_id: int | None = None  # set when running code inside an assignment or exam
 
 
 class SubmitIn(BaseModel):
     problem_id: int
     language: LanguageKey
     source_code: str = Field(min_length=1)
+    assessment_id: int | None = None  # set when the answer counts for an assignment or exam
 
 
 class SubmissionOut(ORM):
@@ -231,6 +233,8 @@ class SubmissionOut(ORM):
     user_id: int
     kind: str
     problem_id: int | None
+    assessment_id: int | None = None
+    hidden: bool = False  # True: this is an exam answer and results are not published yet
     language: str
     source_code: str
     status: str
@@ -257,6 +261,7 @@ class SubmissionBrief(ORM):
     total_count: int | None
     runtime_ms: int | None
     created_at: datetime
+    hidden: bool = False
 
 
 # ---------- courses ----------
@@ -352,3 +357,166 @@ class LessonOut(BaseModel):
 
 class OrderIn(BaseModel):
     ids: list[int] = Field(min_length=1, max_length=500)
+
+
+# ---------- assessments (assignments and exams) ----------
+AssessmentType = Literal["assignment", "exam"]
+
+
+class AssessmentProblemIn(BaseModel):
+    problem_id: int
+    marks: float = Field(gt=0, le=1000)
+
+
+def _need_time_zone(moment: datetime) -> datetime:
+    if moment.tzinfo is None:
+        raise ValueError("Send the time with a time zone, for example 2026-12-01T09:00:00+05:30 or ...Z")
+    return moment
+
+
+class AssessmentIn(BaseModel):
+    batch_id: int
+    title: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=2000)
+    type: AssessmentType
+    starts_at: datetime
+    ends_at: datetime
+    duration_min: int | None = Field(default=None, ge=5, le=600)
+    problems: list[AssessmentProblemIn] = Field(min_length=1, max_length=30)
+
+    @field_validator("starts_at", "ends_at")
+    @classmethod
+    def has_time_zone(cls, moment: datetime) -> datetime:
+        return _need_time_zone(moment)
+
+    @field_validator("problems")
+    @classmethod
+    def no_repeated_problems(cls, items: list[AssessmentProblemIn]) -> list[AssessmentProblemIn]:
+        ids = [p.problem_id for p in items]
+        if len(ids) != len(set(ids)):
+            raise ValueError("A problem can be used only once in an assessment.")
+        return items
+
+
+class AssessmentPatch(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=2000)
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    duration_min: int | None = Field(default=None, ge=5, le=600)
+    is_published: bool | None = None
+    results_published: bool | None = None
+    problems: list[AssessmentProblemIn] | None = Field(default=None, min_length=1, max_length=30)
+
+    @field_validator("starts_at", "ends_at")
+    @classmethod
+    def has_time_zone(cls, moment: datetime | None) -> datetime | None:
+        return None if moment is None else _need_time_zone(moment)
+
+    @field_validator("problems")
+    @classmethod
+    def no_repeated_problems(cls, items):
+        return None if items is None else AssessmentIn.no_repeated_problems(items)
+
+
+class ProblemScoreOut(BaseModel):
+    problem_id: int
+    marks: float  # earned
+    possible: float
+    passed: int
+    total: int
+    attempted: bool
+
+
+class AssessmentProblemOut(BaseModel):
+    problem_id: int
+    title: str
+    difficulty: str
+    marks: float
+    position: int
+    score: ProblemScoreOut | None = None  # the student's own best result, when they may see it
+
+
+class AttemptOut(BaseModel):
+    started_at: datetime
+    deadline_at: datetime
+    finished_at: datetime | None
+
+
+class AssessmentSummary(BaseModel):
+    id: int
+    title: str
+    type: str
+    batch_id: int
+    batch_name: str
+    starts_at: datetime
+    ends_at: datetime
+    duration_min: int | None
+    is_published: bool
+    results_published: bool
+    total_marks: float
+    problem_count: int
+    status: str | None  # what it means for this student; None for teachers
+    my_marks: float | None  # a student sees this only when allowed
+    can_manage: bool
+
+
+class AssessmentOut(AssessmentSummary):
+    description: str
+    server_now: datetime  # so the browser can show a countdown that matches the server's clock
+    attempt: AttemptOut | None
+    problems: list[AssessmentProblemOut] | None  # None = not visible yet
+    has_activity: bool  # someone already started or submitted, so problems can no longer change
+
+
+class DraftIn(BaseModel):
+    language: LanguageKey
+    source_code: str = Field(max_length=70_000)
+
+
+class DraftOut(BaseModel):
+    language: str
+    source_code: str
+    updated_at: datetime
+
+
+class ResultRow(BaseModel):
+    user_id: int
+    name: str
+    email: str
+    status: str  # not_started, in_progress, finished (exam) or submitted / no_submission (assignment)
+    tab_switches: int
+    per_problem: list[ProblemScoreOut]
+    auto_marks: float
+    override_marks: float | None
+    final_marks: float
+    comment: str | None
+    pending: int  # answers still being judged
+    judge_errors: int  # answers the judge could not check, see "Judge again"
+
+
+class ResultsOut(BaseModel):
+    assessment_id: int
+    title: str
+    type: str
+    results_published: bool
+    total_marks: float
+    problems: list[AssessmentProblemOut]
+    rows: list[ResultRow]
+    pending_total: int
+    judge_errors_total: int
+
+
+class OverrideIn(BaseModel):
+    override_marks: float | None = Field(default=None, ge=0, le=100_000)
+    comment: str | None = Field(default=None, max_length=1000)
+
+
+class MyResultOut(BaseModel):
+    visible: bool  # False = the teacher has not published results yet
+    total_marks: float
+    auto_marks: float | None
+    final_marks: float | None
+    comment: str | None
+    per_problem: list[ProblemScoreOut]
+    pending: int
