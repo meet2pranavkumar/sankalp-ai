@@ -34,6 +34,24 @@ class Settings(BaseSettings):
     run_cooldown_seconds: float = 2
     max_source_bytes: int = 65536
 
+    # --- AI helper ---
+    # "none": switched off (the helper says it is not set up). "demo": fixed example hints, no AI, for trying the screens.
+    # "anthropic": the Claude API. Needs ANTHROPIC_API_KEY.
+    ai_provider: str = "none"
+    anthropic_api_key: str | None = None
+    ai_model: str = "claude-haiku-5-5"  # a small, cheap model is enough for hints. Check the name in your Anthropic console.
+    ai_base_url: str = "https://api.anthropic.com"
+    ai_max_output_tokens: int = 400
+    ai_timeout_seconds: float = 30
+    ai_hints_per_problem_per_day: int = 5  # counted over the last 24 hours
+    ai_explains_per_problem_per_day: int = 10
+    ai_hint_cooldown_seconds: float = 60  # a student must wait a little between hints for the same problem
+    ai_user_daily_cap: int = 40  # all problems together, so one student cannot run up the bill
+
+    # --- reports ---
+    # "Today" and "streak" are counted in the college's own time zone, as minutes after UTC. 330 = India (UTC+5:30).
+    report_utc_offset_minutes: int = 330
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

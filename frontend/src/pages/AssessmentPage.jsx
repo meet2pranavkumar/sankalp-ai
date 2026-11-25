@@ -111,6 +111,10 @@ export default function AssessmentPage() {
             </div>
           )}
           <div>
+            <dt className="inline font-medium">AI helper: </dt>
+            <dd className="inline">{isExam ? "off during the exam" : a.ai_hints_allowed ? "allowed" : "off"}</dd>
+          </div>
+          <div>
             <dt className="inline font-medium">Total marks: </dt>
             <dd className="inline">{a.total_marks}</dd>
           </div>

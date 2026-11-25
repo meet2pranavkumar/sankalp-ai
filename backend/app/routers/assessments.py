@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core import clock
 from app.core.access import can_access_batch
+from app.core.csvutil import csv_safe
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.deps import get_current_user, require_roles
@@ -118,7 +119,7 @@ def _detail(db: Session, a: Assessment, user: User, now, finalizer: Finalizer) -
         ]
     base = _summary(db, a, user, now, attempt)
     return AssessmentOut(
-        **base.model_dump(), description=a.description, server_now=now,
+        **base.model_dump(), description=a.description, ai_hints_allowed=a.ai_hints_allowed and a.type == ASSIGNMENT, server_now=now,
         attempt=AttemptOut(started_at=attempt.started_at, deadline_at=attempt.deadline_at, finished_at=attempt.finished_at) if attempt else None,
         problems=problems, has_activity=has_activity(db, a),
     )
@@ -231,6 +232,7 @@ def create_assessment(
         batch_id=batch.id, college_id=batch.college_id, created_by=user.id, title=data.title.strip(),
         description=data.description, type=data.type, starts_at=data.starts_at, ends_at=data.ends_at,
         duration_min=data.duration_min, is_published=False, results_published=False,
+        ai_hints_allowed=data.ai_hints_allowed and data.type == ASSIGNMENT,  # never in an exam
     )
     a.problems = _make_problem_rows(db, user, data.problems)
     db.add(a)
@@ -278,6 +280,8 @@ def update_assessment(
     a.starts_at, a.ends_at, a.duration_min = starts, ends, duration
     if data.is_published is not None:
         a.is_published = data.is_published
+    if data.ai_hints_allowed is not None and a.type == ASSIGNMENT:
+        a.ai_hints_allowed = data.ai_hints_allowed
     publishing_results = data.results_published is True and not a.results_published
     if data.results_published is not None:
         a.results_published = data.results_published
@@ -503,12 +507,6 @@ def rejudge(
     db.commit()
     finalizer.schedule(failed)
     return {"requeued": len(failed)}
-
-
-def csv_safe(value) -> str:
-    """Spreadsheets run text that starts with = + - @ as a formula. Names and comments come from users, so defuse them."""
-    text = "" if value is None else str(value)
-    return "'" + text if text[:1] in ("=", "+", "-", "@", "\t", "\r") else text
 
 
 @router.get("/assessments/{assessment_id}/export")

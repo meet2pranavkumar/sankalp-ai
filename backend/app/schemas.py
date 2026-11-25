@@ -382,6 +382,7 @@ class AssessmentIn(BaseModel):
     starts_at: datetime
     ends_at: datetime
     duration_min: int | None = Field(default=None, ge=5, le=600)
+    ai_hints_allowed: bool = True  # assignments only. The AI helper is always off in an exam.
     problems: list[AssessmentProblemIn] = Field(min_length=1, max_length=30)
 
     @field_validator("starts_at", "ends_at")
@@ -406,6 +407,7 @@ class AssessmentPatch(BaseModel):
     duration_min: int | None = Field(default=None, ge=5, le=600)
     is_published: bool | None = None
     results_published: bool | None = None
+    ai_hints_allowed: bool | None = None
     problems: list[AssessmentProblemIn] | None = Field(default=None, min_length=1, max_length=30)
 
     @field_validator("starts_at", "ends_at")
@@ -463,6 +465,7 @@ class AssessmentSummary(BaseModel):
 
 class AssessmentOut(AssessmentSummary):
     description: str
+    ai_hints_allowed: bool
     server_now: datetime  # so the browser can show a countdown that matches the server's clock
     attempt: AttemptOut | None
     problems: list[AssessmentProblemOut] | None  # None = not visible yet
@@ -520,3 +523,197 @@ class MyResultOut(BaseModel):
     comment: str | None
     per_problem: list[ProblemScoreOut]
     pending: int
+
+
+# ---------- AI helper ----------
+class HintIn(BaseModel):
+    problem_id: int
+    level: int = Field(ge=1, le=3)
+    language: LanguageKey
+    source_code: str = Field(default="", max_length=70_000)
+
+
+class ExplainIn(BaseModel):
+    problem_id: int
+    language: LanguageKey
+    source_code: str = Field(default="", max_length=70_000)
+    error_text: str = Field(min_length=1, max_length=20_000)  # long compiler output is cut short on the server
+
+
+class AIRecentOut(BaseModel):
+    id: int
+    kind: str
+    level: int | None
+    text: str
+    created_at: datetime
+
+
+class AIUsageOut(BaseModel):
+    enabled: bool  # False: the student cannot ask right now. See blocked_reason.
+    blocked_reason: str | None
+    hints_used: int
+    hints_limit: int
+    explains_used: int
+    explains_limit: int
+    available_levels: list[int]  # level 2 opens after level 1 has been read, and so on
+    retry_after_seconds: int  # the wait before the next hint for this problem
+    recent: list[AIRecentOut]  # the answers from the last 24 hours, so a refresh loses nothing
+
+
+class AIAnswerOut(BaseModel):
+    id: int
+    kind: str
+    level: int | None
+    text: str
+    usage: AIUsageOut
+
+
+class AIInsightRow(BaseModel):
+    problem_id: int
+    title: str
+    students: int
+    requests: int
+    hints: int
+    explains: int
+    level3: int
+    flagged: int  # times the AI tried to give a solution and the safety check stopped it
+    errors: int
+    last_at: datetime
+
+
+class AIRequestRow(BaseModel):
+    id: int
+    student_name: str
+    student_email: str
+    kind: str
+    level: int | None
+    status: str
+    flagged: bool
+    text: str
+    created_at: datetime
+
+
+# ---------- reports ----------
+class CourseProgressOut(BaseModel):
+    course_id: int
+    title: str
+    completed_lessons: int
+    total_lessons: int
+    percent: float
+
+
+class SolvedByLevel(BaseModel):
+    difficulty: str
+    solved: int
+    total: int  # problems of this level the student can practise
+
+
+class DayActivity(BaseModel):
+    date: str  # YYYY-MM-DD in the college's time zone
+    submissions: int  # runs and submits
+    accepted: int
+    lessons: int
+
+
+class RecentSubmissionOut(BaseModel):
+    id: int
+    problem_id: int | None
+    title: str
+    language: str
+    verdict: str | None
+    passed_count: int | None
+    total_count: int | None
+    created_at: datetime
+    hidden: bool = False  # an exam answer whose result is not published yet
+
+
+class StudentReportOut(BaseModel):
+    student_id: int
+    name: str
+    email: str
+    courses: list[CourseProgressOut]
+    problems: list[SolvedByLevel]
+    streak_days: int
+    active_days_30: int
+    total_submissions: int  # all the "Submit" presses
+    accepted_submissions: int
+    last_active_at: datetime | None
+    activity: list[DayActivity]  # the last 30 days, oldest first
+    recent: list[RecentSubmissionOut]
+    ai_requests_30d: int | None  # teachers see this, students do not need it
+
+
+class BatchSummaryOut(BaseModel):
+    batch_id: int
+    name: str
+    year: int | None
+    branch: str | None
+    student_count: int
+    total_lessons: int  # lessons in the courses the batch can see
+    avg_completion_percent: float
+    avg_problems_solved: float
+    inactive_count: int
+    last_active_at: datetime | None
+
+
+class StudentRowOut(BaseModel):
+    user_id: int
+    name: str
+    email: str
+    lessons_completed: int
+    lessons_total: int
+    completion_percent: float
+    problems_solved: int
+    submissions_30d: int
+    ai_requests_30d: int
+    last_active_at: datetime | None
+    days_inactive: int | None  # None = never active
+    status: str  # active, inactive, never_active
+
+
+class TopicOut(BaseModel):
+    topic: str
+    students: int
+    pairs_attempted: int  # (student, problem) pairs that were tried
+    pairs_solved: int
+    solve_rate_percent: float
+    wrong_submissions: int
+    hint_requests: int
+
+
+class WeakProblemOut(BaseModel):
+    problem_id: int
+    title: str
+    difficulty: str
+    students_attempted: int
+    students_solved: int
+    solve_rate_percent: float
+    wrong_submissions: int
+    hint_requests: int
+
+
+class CourseAverageOut(BaseModel):
+    course_id: int
+    title: str
+    total_lessons: int
+    avg_percent: float
+
+
+class AssessmentAverageOut(BaseModel):
+    assessment_id: int
+    title: str
+    type: str
+    results_published: bool
+    students: int
+    participants: int
+    avg_percent: float | None  # None while nobody took part
+
+
+class BatchReportOut(BaseModel):
+    summary: BatchSummaryOut
+    inactive_days: int
+    students: list[StudentRowOut]
+    weak_topics: list[TopicOut]
+    weak_problems: list[WeakProblemOut]
+    courses: list[CourseAverageOut]
+    assessments: list[AssessmentAverageOut]

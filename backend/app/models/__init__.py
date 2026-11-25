@@ -1,4 +1,5 @@
 # Import every model here so Alembic can see them.
+from app.models.ai import AIRequest  # noqa: F401
 from app.models.assessment import (  # noqa: F401
     Assessment, AssessmentAttempt, AssessmentDraft, AssessmentProblem, AssessmentResult,
 )

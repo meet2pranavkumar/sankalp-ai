@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { api } from "../api.js";
 import { useAuth } from "../auth.jsx";
 import CodeEditor from "../CodeEditor.jsx";
+import AIHelper from "../AIHelper.jsx";
 import ExamTimer from "../ExamTimer.jsx";
 import Markdown from "../Markdown.jsx";
 import { waitForResult } from "../polling.js";
@@ -90,6 +91,17 @@ function SubmitResult({ result }) {
       )}
     </div>
   );
+}
+
+/** The latest compiler or runtime message from the student's own Run or Submit, for the "Explain my error" button. */
+export function latestError(run, submit) {
+  if (run?.verdict === "compile_error" && run.compile_output) return run.compile_output;
+  if (run?.verdict === "runtime_error" && (run.stderr || run.message)) return run.stderr || run.message;
+  if (submit && !submit.hidden) {
+    if (submit.verdict === "compile_error" && submit.compile_output) return submit.compile_output;
+    if (submit.verdict === "runtime_error") return submit.results?.find((t) => t.error)?.error || submit.message || null;
+  }
+  return null;
 }
 
 export default function ProblemPage() {
@@ -258,6 +270,8 @@ export default function ProblemPage() {
   if (!problem) return <p className="text-slate-500">Loading…</p>;
 
   const samples = problem.test_cases.filter((t) => !t.is_hidden);
+  // Never in an exam. In a normal problem or an assignment the helper decides by itself whether it is open.
+  const showAI = isStudent && (!inAssessment || assessment?.type === "assignment");
   const closedText =
     inAssessment && !readOnly && assessment && !canAnswer
       ? assessment.type === "exam"
@@ -358,6 +372,10 @@ export default function ProblemPage() {
             <Card title="Submission result">
               <SubmitResult result={submitResult} />
             </Card>
+          )}
+
+          {showAI && (
+            <AIHelper problemId={Number(id)} language={language} code={code} lastError={latestError(runResult, submitResult)} />
           )}
 
           {!readOnly && (

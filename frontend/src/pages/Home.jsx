@@ -10,6 +10,8 @@ const TIPS = {
     ["/problems", "Add problems to the shared bank"],
   ],
   admin: [
+    ["/reports", "See how the batches are doing"],
+    ["/ai-help", "See where students ask the AI helper for help"],
     ["/assessments", "See assignments and exams"],
     ["/courses", "See and publish courses"],
     ["/people", "Add teachers and students"],
@@ -17,6 +19,8 @@ const TIPS = {
     ["/problems", "Create coding problems"],
   ],
   teacher: [
+    ["/reports", "See how your classes are doing"],
+    ["/ai-help", "See where students ask the AI helper for help"],
     ["/assessments", "Create an assignment or exam"],
     ["/courses", "Make a course from the starter course"],
     ["/batches", "Create a batch"],
@@ -24,6 +28,7 @@ const TIPS = {
     ["/problems", "Create coding problems"],
   ],
   student: [
+    ["/progress", "See your progress"],
     ["/assessments", "See your assignments and exams"],
     ["/courses", "Start learning: C Programming Basics"],
     ["/problems", "Solve a coding problem"],
@@ -51,7 +56,6 @@ export default function Home() {
           ))}
         </ul>
       </Card>
-      <p className="text-sm text-slate-500">The AI helper is coming in a later phase.</p>
     </div>
   );
 }

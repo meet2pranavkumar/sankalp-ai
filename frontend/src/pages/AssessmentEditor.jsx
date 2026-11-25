@@ -26,7 +26,7 @@ export default function AssessmentEditor() {
   const [locked, setLocked] = useState(false);
   const [form, setForm] = useState({
     batch_id: "", type: "exam", title: "", description: "",
-    starts: inHours(1), ends: inHours(3), duration: 60,
+    starts: inHours(1), ends: inHours(3), duration: 60, ai: true,
   });
   const [picked, setPicked] = useState([]); // [{problem_id, title, marks}]
   const [error, setError] = useState("");
@@ -49,6 +49,7 @@ export default function AssessmentEditor() {
         setForm({
           batch_id: String(a.batch_id), type: a.type, title: a.title, description: a.description,
           starts: toLocalInput(a.starts_at), ends: toLocalInput(a.ends_at), duration: a.duration_min ?? 60,
+          ai: a.ai_hints_allowed,
         });
         setPicked(a.problems.map((p) => ({ problem_id: p.problem_id, title: p.title, marks: p.marks })));
         setLocked(a.has_activity);
@@ -84,6 +85,8 @@ export default function AssessmentEditor() {
       starts_at: fromLocalInput(form.starts),
       ends_at: fromLocalInput(form.ends),
       duration_min: form.type === "exam" ? Number(form.duration) : null,
+      // The AI helper is always off in an exam, so the choice exists only for assignments.
+      ...(form.type === "assignment" ? { ai_hints_allowed: form.ai } : {}),
     };
     try {
       let saved;
@@ -156,6 +159,14 @@ export default function AssessmentEditor() {
               </Field>
             )}
           </div>
+          {form.type === "assignment" ? (
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input type="checkbox" checked={form.ai} onChange={(e) => setForm({ ...form, ai: e.target.checked })} />
+              Students may use the AI helper for these problems while the assignment is open
+            </label>
+          ) : (
+            <p className="text-xs text-slate-500">The AI helper is always switched off during an exam.</p>
+          )}
           <p className="text-xs text-slate-500">
             {form.type === "exam"
               ? "Students can press Start any time between opening and closing. The timer never runs past the closing time."

@@ -33,3 +33,8 @@ export function formatMinutes(minutes) {
   if (h === 0) return `${m} min`;
   return m === 0 ? `${h} h` : `${h} h ${m} min`;
 }
+
+/** "10 Dec 2026" in the person's own language and time zone. */
+export function formatDay(iso) {
+  return new Date(iso).toLocaleDateString([], { dateStyle: "medium" });
+}

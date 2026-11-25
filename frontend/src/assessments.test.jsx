@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import ExamTimer from "./ExamTimer.jsx";
 import { formatCountdown, formatMinutes, fromLocalInput, toLocalInput } from "./time.js";
 import { moveItem } from "./pages/AssessmentEditor.jsx";
-import { mockBackend, renderApp, users } from "./testUtils.jsx";
+import { AI_OFF, mockBackend, renderApp, users } from "./testUtils.jsx";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -27,7 +27,7 @@ const assessment = (over = {}) => ({
   starts_at: at(-5 * MIN), ends_at: at(120 * MIN), duration_min: 60,
   is_published: true, results_published: false, total_marks: 30, problem_count: 2,
   status: "ready", my_marks: null, can_manage: false, description: "", server_now: at(0),
-  attempt: null, problems: null, has_activity: false, ...over,
+  attempt: null, problems: null, has_activity: false, ai_hints_allowed: false, ...over,
 });
 const running = (over = {}) => assessment({ status: "in_progress", attempt: attempt(), problems: PROBLEMS, ...over });
 
@@ -315,6 +315,7 @@ describe("problem page inside an assessment", () => {
       "GET /assessments/3/problems/7/submissions": () => [],
       "GET /assessments/3/problems/7/draft": () => null,
       "PUT /assessments/3/problems/7/draft": () => ({ language: "python", source_code: "x", updated_at: at(0) }),
+      "GET /ai/usage": () => AI_OFF,
       ...extra,
     });
   const open = () => renderApp("/assessments/3/problems/7", { token: "t", storage: SIMPLE });

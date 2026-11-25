@@ -312,3 +312,59 @@ describe("results page", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Assessment not found.");
   });
 });
+
+// ---------------------------------------------------------------- the AI switch for assignments
+describe("AI helper switch in the editor", () => {
+  it("lets a teacher switch the helper off for an assignment", async () => {
+    let sent = null;
+    setupEditor({ "POST /assessments": (o) => { sent = JSON.parse(o.body); return [201, created({ type: "assignment", duration_min: null })]; }, "GET /assessments/12": () => created({ type: "assignment", duration_min: null }) });
+    renderApp("/assessments/new", { token: "t" });
+    await fillBasics("Homework");
+    await userEvent.selectOptions(screen.getByLabelText("Type"), "assignment");
+    const box = screen.getByLabelText(/Students may use the AI helper/);
+    expect(box).toBeChecked(); // on by default
+    await userEvent.click(box);
+    await userEvent.click(await screen.findByLabelText("Use Prime check"));
+    await userEvent.click(screen.getByRole("button", { name: "Create (as a draft)" }));
+    await waitFor(() => expect(sent).not.toBeNull());
+    expect(sent.ai_hints_allowed).toBe(false);
+  });
+
+  it("sends true when left on", async () => {
+    let sent = null;
+    setupEditor({ "POST /assessments": (o) => { sent = JSON.parse(o.body); return [201, created({ type: "assignment", duration_min: null })]; }, "GET /assessments/12": () => created({ type: "assignment", duration_min: null }) });
+    renderApp("/assessments/new", { token: "t" });
+    await fillBasics("Homework");
+    await userEvent.selectOptions(screen.getByLabelText("Type"), "assignment");
+    await userEvent.click(await screen.findByLabelText("Use Prime check"));
+    await userEvent.click(screen.getByRole("button", { name: "Create (as a draft)" }));
+    await waitFor(() => expect(sent).not.toBeNull());
+    expect(sent.ai_hints_allowed).toBe(true);
+  });
+
+  it("says the helper is always off in an exam and sends no choice", async () => {
+    let sent = null;
+    setupEditor({ "POST /assessments": (o) => { sent = JSON.parse(o.body); return [201, created()]; }, "GET /assessments/12": () => created() });
+    renderApp("/assessments/new", { token: "t" });
+    await fillBasics();
+    expect(screen.getByText("The AI helper is always switched off during an exam.")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Students may use the AI helper/)).not.toBeInTheDocument();
+    await userEvent.click(await screen.findByLabelText("Use Prime check"));
+    await userEvent.click(screen.getByRole("button", { name: "Create (as a draft)" }));
+    await waitFor(() => expect(sent).not.toBeNull());
+    expect(sent).not.toHaveProperty("ai_hints_allowed");
+  });
+
+  it("loads the saved choice when editing", async () => {
+    setupEditor({ "GET /assessments/12": () => created({ type: "assignment", duration_min: null, ai_hints_allowed: false }) });
+    renderApp("/assessments/12/edit", { token: "t" });
+    expect(await screen.findByLabelText(/Students may use the AI helper/)).not.toBeChecked();
+  });
+
+  it("shows teachers whether the helper is allowed", async () => {
+    mockBackend({ "GET /auth/me": () => users.teacher, "GET /assessments/12": () => created({ type: "assignment", duration_min: null, ai_hints_allowed: false }) });
+    renderApp("/assessments/12", { token: "t" });
+    const row = (await screen.findByText("AI helper:")).closest("div");
+    expect(row).toHaveTextContent("off");
+  });
+});

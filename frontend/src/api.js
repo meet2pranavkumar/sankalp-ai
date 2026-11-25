@@ -148,6 +148,37 @@ export const api = {
     return res.blob();
   },
 
+  aiUsage: (problemId) => request(`/ai/usage?problem_id=${problemId}`),
+  aiHint: (body) => request("/ai/hint", { method: "POST", body }),
+  aiExplain: (body) => request("/ai/explain-error", { method: "POST", body }),
+  aiInsights: (days = 30) => request(`/ai/insights?days=${days}`),
+  aiRequests: (problemId, days = 30) => request(`/ai/requests?problem_id=${problemId}&days=${days}`),
+
+  myReport: () => request("/reports/me"),
+  batchSummaries: (inactiveDays = 7) => request(`/reports/batches?inactive_days=${inactiveDays}`),
+  batchReport: (id, inactiveDays = 7) => request(`/reports/batches/${id}?inactive_days=${inactiveDays}`),
+  studentReport: (id) => request(`/reports/students/${id}`),
+  downloadBatchReport: async (id, inactiveDays = 7) => {
+    let res;
+    try {
+      res = await fetch(`${BASE_URL}/api/v1/reports/batches/${id}/export?inactive_days=${inactiveDays}`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+    } catch {
+      throw new ApiError("Cannot reach the server. Is the backend running?", 0);
+    }
+    if (!res.ok) {
+      let detail;
+      try {
+        detail = (await res.json()).detail;
+      } catch {
+        /* no body */
+      }
+      throw new ApiError(errorMessage(detail), res.status);
+    }
+    return res.blob();
+  },
+
   listBatches: () => request("/batches"),
   getBatch: (id) => request(`/batches/${id}`),
   createBatch: (body) => request("/batches", { method: "POST", body }),

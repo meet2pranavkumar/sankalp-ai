@@ -5,6 +5,7 @@ os.environ["DATABASE_URL"] = "sqlite://"
 os.environ["BCRYPT_ROUNDS"] = "4"  # fast hashing, tests only
 os.environ["SUBMIT_COOLDOWN_SECONDS"] = "0"  # tests that need the cooldown turn it on themselves
 os.environ["RUN_COOLDOWN_SECONDS"] = "0"
+os.environ["AI_HINT_COOLDOWN_SECONDS"] = "0"  # the cooldown test turns it on itself
 
 from datetime import datetime, timedelta, timezone
 
@@ -20,6 +21,8 @@ from app.core.security import hash_password  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import College, Role, User  # noqa: E402
 from app.routers.submissions import judge_dependency  # noqa: E402
+from app.routers.ai import ai_provider_dependency  # noqa: E402
+from app.services.ai.base import ProviderResult  # noqa: E402
 from app.services.finalizer import optional_judge  # noqa: E402
 from app.services.judge.base import JudgeJob, JudgeOutcome, RunStatus  # noqa: E402
 
@@ -36,6 +39,37 @@ class ScriptedJudge:
     def run_jobs(self, jobs):
         self.jobs.extend(jobs)
         return [self.respond(job) for job in jobs]
+
+
+class ScriptedAI:
+    """A fake AI for tests. It records every prompt it is sent. Set .respond to change what it says."""
+
+    def __init__(self):
+        self.calls = []  # each call: SimpleNamespace(system, user, max_tokens)
+        self.respond = self.nice
+
+    @staticmethod
+    def nice(system, user, max_tokens):
+        if "Task: explain error" in user:
+            return ProviderResult("The compiler says something is missing. Look at the line before the line it names.", 120, 30)
+        level = int(user.split("Hint level: ")[1][0])
+        text = {
+            1: "What must the program print for the first sample? Try it by hand first.",
+            2: "1. Read the two numbers.\n2. Add them.\n3. Print the sum.",
+            3: "```\nread two numbers\nadd them together\nprint the total\n```",
+        }[level]
+        return ProviderResult(text, 150, 40)
+
+    def complete(self, system, user, max_tokens):
+        from types import SimpleNamespace
+
+        self.calls.append(SimpleNamespace(system=system, user=user, max_tokens=max_tokens))
+        return self.respond(system, user, max_tokens)
+
+
+@pytest.fixture()
+def fake_ai():
+    return ScriptedAI()
 
 
 @pytest.fixture()
@@ -71,7 +105,7 @@ def fake_judge():
 
 
 @pytest.fixture()
-def client(db_session, session_factory, fake_judge):
+def client(db_session, session_factory, fake_judge, fake_ai):
     def override_get_db():
         yield db_session
 
@@ -79,6 +113,7 @@ def client(db_session, session_factory, fake_judge):
     app.dependency_overrides[get_session_factory] = lambda: session_factory
     app.dependency_overrides[judge_dependency] = lambda: fake_judge
     app.dependency_overrides[optional_judge] = lambda: fake_judge
+    app.dependency_overrides[ai_provider_dependency] = lambda: fake_ai
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
@@ -184,3 +219,14 @@ def school(client, world, login, make_user, clock):
         "p1": create_problem(client, teacher, title="Add two numbers"),
         "p2": create_problem(client, teacher, title="Add again"),
     }
+
+
+@pytest.fixture()
+def day(clock, monkeypatch):
+    """Report tests: 'now' is exactly 10 December 2026, 12:00, and days are counted in UTC to keep the sums easy."""
+    from app.core.config import get_settings
+    from tests.report_helpers import NOON
+
+    clock.now = NOON
+    monkeypatch.setattr(get_settings(), "report_utc_offset_minutes", 0)
+    return clock

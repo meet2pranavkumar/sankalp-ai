@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, true
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -27,6 +27,8 @@ class Assessment(Base):
     duration_min: Mapped[int | None] = mapped_column(Integer)  # exams only: minutes each student gets
     is_published: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # students can see it
     results_published: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Assignments only: may students use the AI helper? Exams never allow it, whatever this says.
+    ai_hints_allowed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
 

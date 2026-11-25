@@ -4,6 +4,12 @@ import { vi } from "vitest";
 import { AppRoutes } from "./App.jsx";
 import { AuthProvider } from "./auth.jsx";
 
+// What the server says when the AI helper is switched off. Problem pages ask for it, so most tests include it.
+export const AI_OFF = {
+  enabled: false, blocked_reason: "The AI helper is not set up yet. Ask your teacher.", hints_used: 0, hints_limit: 5,
+  explains_used: 0, explains_limit: 10, available_levels: [], retry_after_seconds: 0, recent: [],
+};
+
 export const users = {
   teacher: { id: 2, name: "Teena Teacher", email: "t@x.com", role: "teacher", college_id: 1, college_name: "Govt Polytechnic", is_active: true },
   student: { id: 3, name: "Sam Student", email: "s@x.com", role: "student", college_id: 1, college_name: "Govt Polytechnic", is_active: true },

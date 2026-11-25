@@ -2,7 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseTags } from "./pages/ProblemEditor.jsx";
-import { mockBackend, renderApp, users } from "./testUtils.jsx";
+import { AI_OFF, mockBackend, renderApp, users } from "./testUtils.jsx";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -29,6 +29,7 @@ function problemPageBackend(extra = {}, me = users.student) {
     "GET /problems/7": () => PROBLEM,
     "GET /languages": () => LANGS,
     "GET /problems/7/submissions": () => [],
+    "GET /ai/usage": () => AI_OFF,
     ...extra,
   });
 }
