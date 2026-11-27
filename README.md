@@ -247,33 +247,39 @@ The helper gives hints on a problem in three steps, and explains error messages.
 
 ## How to try Phase 7 (progress and reports)
 
-**As a student**
-1. Open **My progress**. You see your streak, how many days you were active in the last 30, problems solved at each level,
-   your progress in every course, a graph of the last 30 days, and your recent answers.
-2. Do some work (finish a lesson, solve a problem) and look again. Your exam results appear here only after your teacher publishes them.
+**As a student:** open **My progress**. You see your streak, how many days you were active, problems solved by level,
+your progress in every course, a graph of the last 30 days, and your recent answers.
 
-**As a teacher or admin**
-3. Open **Reports**. You see your batches (an admin sees every batch of the college) with the average course completion,
-   the average problems solved, and how many students need attention.
-4. Open a batch. You see:
-   - **Students who need attention**: students with no activity for N days (you choose 3, 7, 14 or 30), and students who have never been active.
-   - **All students**: course completion, problems solved, answers sent and AI helper use in the last 30 days, last activity, status.
-   - **Weak topics** and **Hardest problems**: where students try but do not succeed. A weak topic may need another lesson.
-   - **Courses**, and the average marks of **assignments and exams**, with a link to the full marks.
-5. Press **Download CSV** to get the table as a spreadsheet.
-6. Click a student's name to open their own dashboard, with real exam results and how often they used the AI helper.
+**As a teacher or admin:** open **Reports**.
+1. You see one row for each of your batches (admins see every batch of the college). Press a batch name.
+2. The class report shows: how many students need attention, a table of every student (course completion, problems solved,
+   answers in 30 days, AI helper use, last activity, status), the **weak topics**, the **hardest problems**,
+   the average completion of every course, and the average marks of every assignment and exam.
+3. Press a student's name to see that student's own dashboard, including their real exam results.
+4. Press **Download CSV** to get the table as a spreadsheet. Use **Inactive after** to choose how many quiet days count as inactive.
 
 ### What the numbers mean
 
-- **Active:** the student sent an answer or ran code, finished a lesson, or started an exam. (Logging in alone is not tracked.)
-- **Streak:** days in a row with some activity, counted back from today. If today has nothing yet, yesterday still keeps the streak alive.
-- **Solved:** at least one Accepted answer for the problem. Several answers to the same problem count once. A Run never counts.
-- **Weak topic:** among all the (student, problem) tries under a topic, the share that were never solved.
-  A topic is shown only after at least 3 such tries. A problem is shown as hard when at least 2 students tried it and not all solved it.
-  Only the last 90 days count, and only answers that the judge really checked.
-- **Days and "today"** are counted in the college's time zone. The default is India (UTC+5:30).
-  Change it with `REPORT_UTC_OFFSET_MINUTES` in `backend/.env` (minutes after UTC; for example 330).
-- A student's **own** page never shows an exam result before you publish it. You always see the real numbers.
+- **Active:** the student sent an answer, ran code, finished a lesson, or started an exam. Logging in alone does not count,
+  because we do not record logins.
+- **Inactive:** no activity for the chosen number of days (7 by default). **Never active:** no activity at all yet.
+- **Streak:** how many days in a row had activity, counted back from today. A day with nothing yet does not break the streak,
+  because the day is not over.
+- **Solved:** the student has at least one Accepted answer for the problem. A Run never counts.
+- **Course completion:** lessons the student marked as done, out of all lessons in the published courses their college can read.
+- **Weak topic:** look at every time a student tried a problem with that topic tag. The topic is weak when many of those tries
+  never ended in a solved problem. A topic needs at least 3 tries before it is shown, so one bad day does not create a "weak topic".
+- **Hardest problems:** problems that at least 2 students tried and not all solved, with the worst first.
+  Answers where the code judge failed are ignored, because that says nothing about the student.
+- **Days and time zone:** days are counted in your college's time zone. The default is India (UTC+5:30).
+  Change it with `REPORT_UTC_OFFSET_MINUTES` in `backend/.env` (minutes after UTC; 330 is India).
+
+### Privacy
+
+- A student's own dashboard never shows an exam result before the teacher publishes it. This includes the problems-solved
+  numbers and the recent answers. The teacher sees the real numbers.
+- Teachers see only their own batches. Admins see the whole college. Nobody sees another college.
+- Students cannot see each other's numbers. There is no leaderboard, on purpose.
 
 ## Who can do what
 
@@ -303,8 +309,9 @@ The helper gives hints on a problem in three steps, and explains error messages.
 | Use the AI helper | | | | yes, not during exams |
 | See AI help usage and answers | | whole college | own batches | |
 | Switch the AI helper off for an assignment | | own college | own batches | |
-| See their own progress dashboard | | | | yes |
-| See class reports and student dashboards | | whole college | own batches | |
+| See own progress dashboard | | | | yes |
+| See class reports, weak topics, CSV | | whole college | own batches | |
+| Open one student's dashboard | | any student of the college | students of own batches | |
 
 People can only see and change data of their own college. Asking for another college's data
 gives "not found", not "forbidden", so nobody can find out what exists elsewhere.
